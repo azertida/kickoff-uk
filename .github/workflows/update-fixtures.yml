@@ -1,0 +1,36 @@
+name: Update fixtures
+
+on:
+  schedule:
+    - cron: "17 6 * * *"     # 06:17 UTC
+    - cron: "23 16 * * *"    # 16:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-fixtures
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Collect fixtures
+        run: python build_data.py
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add matches.json
+          if git diff --staged --quiet; then
+            echo "No change."
+          else
+            git commit -m "data: update fixtures $(date -u +%FT%TZ)"
+            git push
+          fi
