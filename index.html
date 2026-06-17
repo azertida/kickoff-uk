@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🏟️ Kick-off</title>
+
+<meta name="description" content="Your fixtures, in UK time.">
+<meta name="theme-color" content="#10131a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kick-off">
+<link rel="apple-touch-icon" href="icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#10131a; --surface:#181c26; --surface-2:#1f2431; --line:#2a3040;
+    --text:#e8eaf0; --muted:#8b93a7; --accent:#ffd66b; --accent-dim:#caa84e;
+    --cool:#6ea0ff; --ok:#3ddc84; --bad:#ff6b6b; --radius:14px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  *{word-wrap:break-word;overflow-wrap:break-word}
+  html,body{overflow-x:hidden;max-width:100%}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:radial-gradient(120% 60% at 50% -10%, rgba(255,214,107,.07), transparent 60%), var(--bg);
+    color:var(--text);line-height:1.5;min-height:100vh;
+    padding:max(16px,env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:680px;margin:0 auto}
+
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
+  h1{font-family:"Syne",sans-serif;font-weight:800;font-size:1.9rem;letter-spacing:-.02em;line-height:1.05}
+  h1 .glow{color:var(--accent);text-shadow:0 0 18px rgba(255,214,107,.45)}
+  .tagline{color:var(--muted);font-size:.82rem;margin-top:4px}
+  .btn-refresh{
+    flex-shrink:0;width:46px;height:46px;border:1px solid var(--line);background:var(--surface);
+    color:var(--accent);border-radius:var(--radius);font-size:1.2rem;cursor:pointer;
+    transition:transform .15s ease,border-color .15s ease;
+  }
+  .btn-refresh:hover{border-color:var(--accent)}
+  .btn-refresh:active{transform:rotate(180deg)}
+  .btn-refresh:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn-refresh.spinning{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .meta-line{
+    font-family:"DM Mono",monospace;font-size:.66rem;color:var(--muted);
+    margin:10px 0 18px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;
+  }
+  .src{display:inline-flex;align-items:center;gap:5px}
+  .src .d{width:6px;height:6px;border-radius:50%}
+  .src.ok .d{background:var(--ok)} .src.ko .d{background:var(--bad)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .chip{
+    padding:7px 13px;background:var(--surface);border:1px solid var(--line);border-radius:20px;
+    color:var(--muted);font-size:.8rem;cursor:pointer;transition:all .15s ease;white-space:nowrap;
+  }
+  .chip.active{background:var(--accent);color:#1a1400;border-color:var(--accent);font-weight:500}
+  .chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .filters{display:flex;gap:8px;margin-bottom:22px}
+  .filter{
+    flex:1;padding:9px;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    color:var(--muted);font-family:"DM Mono",monospace;font-size:.72rem;cursor:pointer;
+    letter-spacing:.02em;transition:all .15s ease;
+  }
+  .filter.active{background:var(--surface-2);color:var(--accent);border-color:var(--accent-dim)}
+  .filter:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .matchday{margin-bottom:26px}
+  .matchday-head{
+    font-family:"DM Mono",monospace;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:baseline;
+  }
+  .matchday-head .count{color:var(--muted)}
+
+  .match{display:flex;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid rgba(42,48,64,.5);animation:fade .35s ease both}
+  .match:last-child{border-bottom:none}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .kickoff{font-family:"DM Mono",monospace;font-weight:500;font-size:1.1rem;color:var(--accent);min-width:52px;text-align:center;flex-shrink:0}
+  .kickoff .tbd{font-size:.72rem;color:var(--muted)}
+  .kickoff .score{font-size:1rem;color:var(--cool)}
+
+  .match-body{flex:1;min-width:0}
+  .teams{font-weight:500;font-size:.96rem;line-height:1.3}
+  .teams .vs{color:var(--muted);font-family:"DM Mono",monospace;font-size:.78rem;margin:0 5px}
+  .match-meta{font-family:"DM Mono",monospace;font-size:.66rem;color:var(--muted);margin-top:3px}
+  .sport-tag{color:var(--accent-dim)}
+
+  .countdown{font-family:"DM Mono",monospace;font-size:.66rem;color:var(--muted);text-align:right;flex-shrink:0;white-space:nowrap}
+  .countdown.soon{color:var(--accent)}
+  .countdown.done{color:var(--cool)}
+
+  .empty{text-align:center;color:var(--muted);padding:48px 20px;border:1px dashed var(--line);border-radius:var(--radius);font-size:.9rem;line-height:1.6}
+  .empty strong{color:var(--text);display:block;margin-bottom:6px;font-weight:500}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Kick-<span class="glow">off</span></h1>
+      <div class="tagline">Your competitions, in UK time</div>
+    </div>
+    <button class="btn-refresh" id="refresh" title="Reload" aria-label="Reload fixtures">↻</button>
+  </header>
+
+  <div class="meta-line" id="metaLine"></div>
+
+  <div class="chips" id="sportChips"></div>
+
+  <div class="filters" id="filters">
+    <button class="filter active" data-range="upcoming">Upcoming</button>
+    <button class="filter" data-range="today">Today</button>
+    <button class="filter" data-range="week">7 days</button>
+    <button class="filter" data-range="all">All</button>
+  </div>
+
+  <div id="agenda"><div class="empty">Loading…</div></div>
+
+</div>
+
+<script>
+const TZ = "Europe/London";
+const LS = { comp:"kickoff_comp", range:"kickoff_range" };
+const NEAR_DAYS = 60;   // une compétition reste affichée tant qu'elle a un match dans cette fenêtre
+
+let data = null;
+let compFilter = localStorage.getItem(LS.comp) || "all";
+let rangeFilter = localStorage.getItem(LS.range) || "upcoming";
+
+const $ = id => document.getElementById(id);
+
+async function loadData(){
+  $("agenda").innerHTML = '<div class="empty">Loading…</div>';
+  try{
+    const res = await fetch("./matches.json", {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    data = await res.json();
+    renderMeta(); renderChips(); renderAgenda();
+  }catch(e){
+    $("agenda").innerHTML = `<div class="empty"><strong>No data available</strong>
+      Couldn't load <code>matches.json</code>. Check that the GitHub Action has run and published the file.</div>`;
+  }
+}
+
+function renderMeta(){
+  const gen = data.generated ? new Intl.DateTimeFormat("en-GB",{timeZone:TZ,day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(data.generated)) : "—";
+  const srcs = (data.sources||[]).map(s =>
+    `<span class="src ${s.ok?"ok":"ko"}"><span class="d"></span>${esc(s.name)}${s.ok?` (${s.count})`:""}</span>`
+  ).join("");
+  $("metaLine").innerHTML = `<span>updated ${gen}</span>${srcs}`;
+}
+
+// Compétitions « en cours ou proches » : au moins un match dans la fenêtre.
+// data.matches est trié par date -> l'ordre des chips = compétition la plus proche d'abord.
+function activeCompetitions(){
+  const now = Date.now(), lo = now - 2*864e5, hi = now + NEAR_DAYS*864e5;
+  const comps = new Map();
+  for(const m of (data.matches||[])){
+    const d = evDate(m); if(!d) continue;
+    const t = d.getTime();
+    if(t >= lo && t <= hi && !comps.has(m.competition)) comps.set(m.competition, true);
+  }
+  return [...comps.keys()];
+}
+
+function renderChips(){
+  const comps = activeCompetitions();
+  if(compFilter !== "all" && !comps.includes(compFilter)){   // compétition devenue dormante
+    compFilter = "all"; localStorage.setItem(LS.comp, "all");
+  }
+  const chips = [["all","All"], ...comps.map(c => [c, c])];
+  $("sportChips").innerHTML = chips.map(([v,l]) =>
+    `<button class="chip ${compFilter===v?"active":""}" data-comp="${esc(v)}">${esc(l)}</button>`
+  ).join("");
+  $("sportChips").querySelectorAll(".chip").forEach(c =>
+    c.addEventListener("click", () => {
+      compFilter = c.dataset.comp; localStorage.setItem(LS.comp, compFilter);
+      renderChips(); renderAgenda();
+    })
+  );
+}
+
+function evDate(m){
+  if(m.start) return new Date(m.start);
+  if(m.date)  return new Date(m.date + "T12:00:00Z");
+  return null;
+}
+const dayKey   = d => new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+const dayLabel = d => new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"long",day:"numeric",month:"long"}).format(d);
+const hhmm     = d => new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",hour12:false}).format(d);
+
+function countdown(d){
+  const diff = d.getTime() - Date.now();
+  if(diff < -3*36e5) return {txt:"finished", cls:"done"};
+  if(diff < 0)       return {txt:"live", cls:"soon"};
+  const h = diff/36e5;
+  if(h < 1)  return {txt:"in " + Math.round(diff/6e4) + " min", cls:"soon"};
+  if(h < 24) return {txt:"in " + Math.round(h) + " h", cls:"soon"};
+  return {txt:"in " + Math.round(h/24) + " d", cls:""};
+}
+
+function inRange(d){
+  const now = Date.now();
+  const todayKey = dayKey(new Date());
+  if(rangeFilter === "all")   return true;
+  if(rangeFilter === "today") return dayKey(d) === todayKey;
+  if(rangeFilter === "week")  return dayKey(d) >= todayKey && d.getTime() <= now + 7*864e5;
+  return dayKey(d) >= todayKey;   // upcoming
+}
+
+function renderAgenda(){
+  if(!data || !data.matches) return;
+
+  const rows = [];
+  for(const m of data.matches){
+    if(compFilter !== "all" && m.competition !== compFilter) continue;
+    const d = evDate(m);
+    if(!d || !inRange(d)) continue;
+    rows.push({m, d});
+  }
+  rows.sort((a,b) => a.d - b.d);
+
+  if(!rows.length){
+    $("agenda").innerHTML = `<div class="empty"><strong>Nothing to show</strong>
+      No matches for this filter. Try “All”, or another sport.</div>`;
+    return;
+  }
+
+  const days = new Map();
+  for(const r of rows){
+    const k = dayKey(r.d);
+    if(!days.has(k)) days.set(k, {label:dayLabel(r.d), items:[]});
+    days.get(k).items.push(r);
+  }
+
+  let html = "";
+  for(const [, day] of days){
+    html += `<section class="matchday"><div class="matchday-head"><span>${esc(day.label)}</span><span class="count">${day.items.length}</span></div>`;
+    for(const {m, d} of day.items){
+      const left = m.score
+        ? `<span class="score">${esc(m.score)}</span>`
+        : (m.tbd ? '<span class="tbd">TBC</span>' : hhmm(d));
+      const away = m.away ? `<span class="vs">vs</span>${esc(m.away)}` : "";
+      const grp  = m.group ? " · " + esc(m.group) : "";
+      const cd = countdown(d);
+      html += `<div class="match">
+        <div class="kickoff">${left}</div>
+        <div class="match-body">
+          <div class="teams">${esc(m.home||"—")}${away}</div>
+          <div class="match-meta"><span class="sport-tag">${esc(m.sport)}</span> · ${esc(m.competition)}${grp}</div>
+        </div>
+        <div class="countdown ${cd.cls}">${m.score?"finished":cd.txt}</div>
+      </div>`;
+    }
+    html += `</section>`;
+  }
+  $("agenda").innerHTML = html;
+}
+
+$("filters").addEventListener("click", e => {
+  const b = e.target.closest(".filter"); if(!b) return;
+  rangeFilter = b.dataset.range; localStorage.setItem(LS.range, rangeFilter);
+  document.querySelectorAll(".filter").forEach(x => x.classList.toggle("active", x===b));
+  renderAgenda();
+});
+
+$("refresh").addEventListener("click", () => {
+  $("refresh").classList.add("spinning");
+  loadData().finally(() => setTimeout(() => $("refresh").classList.remove("spinning"), 600));
+});
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+document.querySelectorAll(".filter").forEach(x => x.classList.toggle("active", x.dataset.range===rangeFilter));
+loadData();
+</script>
+</body>
+</html>
