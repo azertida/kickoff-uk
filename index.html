@@ -200,7 +200,13 @@ function evDate(m){
   return null;
 }
 const dayKey   = d => new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
-const dayLabel = d => new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"long",day:"numeric",month:"long"}).format(d);
+const dayLabel = d => {
+  const opts = {timeZone:TZ, weekday:"long", day:"numeric", month:"long"};
+  const yr  = new Intl.DateTimeFormat("en-CA",{timeZone:TZ, year:"numeric"}).format(d);
+  const cur = new Intl.DateTimeFormat("en-CA",{timeZone:TZ, year:"numeric"}).format(new Date());
+  if(yr !== cur) opts.year = "numeric";           // année affichée seulement si ≠ année en cours
+  return new Intl.DateTimeFormat("en-GB", opts).format(d);
+};
 const hhmm     = d => new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",hour12:false}).format(d);
 
 function countdown(d){
