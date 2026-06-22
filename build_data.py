@@ -12,7 +12,6 @@ Sources:
   - Women's football : TheSportsDB V1 (free key "123", server-side)
                        -> Women's Super League, UEFA Women's Champions League,
                           FIFA Women's World Cup 2027 (best-effort)
-  - Rugby            : TheSportsDB -> Six Nations
 
 Note: openfootball league times (e.g. Premier League) are bare local times with
 no UTC offset -> interpreted in the source timezone (Europe/London) and stored
