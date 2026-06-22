@@ -197,7 +197,6 @@ def collect_tsdb(name, substrs, match_sport, label):
 
 # (name, substrings to resolve, TheSportsDB sport, output sport label)
 TSDB_SOURCES = [
-    ("Six Nations",              ["Six Nations"],                                       "Rugby",  "Rugby"),
     ("UEFA Champions League",    ["UEFA Champions League"],                              "Soccer", "Football"),
     ("UEFA Europa League",       ["UEFA Europa League"],                                 "Soccer", "Football"),
     ("Women's Super League",     ["Women's Super League", "Womens Super League", "WSL"], "Soccer", "Women's football"),
