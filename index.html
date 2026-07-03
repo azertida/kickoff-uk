@@ -146,7 +146,7 @@ const $ = id => document.getElementById(id);
 async function loadData(){
   $("agenda").innerHTML = '<div class="empty">Loading…</div>';
   try{
-    const res = await fetch("./matches.json", {cache:"no-store"});
+    const res = await fetch("./matches.json?t=" + Date.now(), {cache:"no-store"});
     if(!res.ok) throw new Error("HTTP " + res.status);
     data = await res.json();
     renderMeta(); renderChips(); renderAgenda();
