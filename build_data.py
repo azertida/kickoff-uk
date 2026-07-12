@@ -79,7 +79,7 @@ def parse_openfootball(data, name, tz=None):
             continue
         start, tbd = parse_openfootball_time(date, m.get("time"), tz)
         sc = m.get("score")
-        ft = sc.get("ft") if isinstance(sc, dict) else (sc if isinstance(sc, list) else None)
+        ft = (sc.get("et") or sc.get("ft")) if isinstance(sc, dict) else (sc if isinstance(sc, list) else None)
         score = f"{ft[0]}\u2013{ft[1]}" if isinstance(ft, list) and len(ft) == 2 else None
         h, a = m.get("team1"), m.get("team2")
         out.append({
