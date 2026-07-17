@@ -135,7 +135,6 @@
 <script>
 const TZ = "Europe/London";
 const LS = { comp:"kickoff_comp", range:"kickoff_range" };
-const NEAR_DAYS = 60;   // une compétition reste affichée tant qu'elle a un match dans cette fenêtre
 
 let data = null;
 let compFilter = localStorage.getItem(LS.comp) || "all";
@@ -164,15 +163,15 @@ function renderMeta(){
   $("metaLine").innerHTML = `<span>updated ${gen}</span>${srcs}`;
 }
 
-// Compétitions « en cours ou proches » : au moins un match dans la fenêtre.
-// data.matches est trié par date -> l'ordre des chips = compétition la plus proche d'abord.
+// Les boutons suivent l'agenda : une compétition a un bouton dès qu'elle est
+// affichée dans la plage courante. data.matches est trié par date, donc l'ordre
+// des boutons = compétition la plus proche d'abord.
 function activeCompetitions(){
-  const now = Date.now(), lo = now - 2*864e5, hi = now + NEAR_DAYS*864e5;
   const comps = new Map();
   for(const m of (data.matches||[])){
     const d = evDate(m); if(!d) continue;
-    const t = d.getTime();
-    if(t >= lo && t <= hi && !comps.has(m.competition)) comps.set(m.competition, true);
+    if(!inRange(d)) continue;
+    if(!comps.has(m.competition)) comps.set(m.competition, true);
   }
   return [...comps.keys()];
 }
@@ -281,7 +280,7 @@ $("filters").addEventListener("click", e => {
   const b = e.target.closest(".filter"); if(!b) return;
   rangeFilter = b.dataset.range; localStorage.setItem(LS.range, rangeFilter);
   document.querySelectorAll(".filter").forEach(x => x.classList.toggle("active", x===b));
-  renderAgenda();
+  renderChips(); renderAgenda();
 });
 
 $("refresh").addEventListener("click", () => {

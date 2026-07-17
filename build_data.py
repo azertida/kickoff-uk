@@ -134,25 +134,16 @@ def season_guesses():
     return [f"{s}-{s+1}", f"{y}", f"{y}-{y+1}"]
 
 def tsdb_events(idl):
-    try:
-        evs = get_json(f"{TSDB}/eventsnextleague.php?id={idl}").get("events") or []
-        if evs:
-            return evs
-    except Exception:
-        pass
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+    # eventsnextleague.php is throttled on the free key (returns a single event),
+    # so we read the whole season instead: eventsseason.php is a free method and
+    # returns every fixture + result, like openfootball does for the leagues.
     for s in season_guesses():
         try:
             evs = get_json(f"{TSDB}/eventsseason.php?id={idl}&s={s}").get("events") or []
         except Exception:
             evs = []
-        up = []
-        for e in evs:
-            iso, _ = parse_tsdb_time(e)
-            if iso and datetime.fromisoformat(iso.replace("Z", "+00:00")) > cutoff:
-                up.append(e)
-        if up:
-            return up
+        if evs:
+            return evs
         time.sleep(0.4)
     return []
 
@@ -174,7 +165,6 @@ def collect_tsdb(name, idl, label):
             "group": e.get("strRound") or None,
             "venue": e.get("strVenue") or None,
         })
-        time.sleep(0.4)
     return out
 
 # (display name, TheSportsDB league id, output sport label)
