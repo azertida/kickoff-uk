@@ -133,20 +133,6 @@ def season_guesses():
     s = y if mth >= 7 else y - 1
     return [f"{s}-{s+1}", f"{y}", f"{y}-{y+1}"]
 
-_leagues = None
-def tsdb_all_leagues():
-    global _leagues
-    if _leagues is None:
-        _leagues = get_json(f"{TSDB}/all_leagues.php").get("leagues") or []
-    return _leagues
-
-def resolve_league(substrs, sport):
-    for l in tsdb_all_leagues():
-        nm = (l.get("strLeague") or "")
-        if l.get("strSport") == sport and any(s.lower() in nm.lower() for s in substrs):
-            return l.get("idLeague"), nm
-    return None, None
-
 def tsdb_events(idl):
     try:
         evs = get_json(f"{TSDB}/eventsnextleague.php?id={idl}").get("events") or []
@@ -170,10 +156,7 @@ def tsdb_events(idl):
         time.sleep(0.4)
     return []
 
-def collect_tsdb(name, substrs, match_sport, label):
-    idl, real = resolve_league(substrs, match_sport)
-    if not idl:
-        raise RuntimeError(f"league not found ({'/'.join(substrs)})")
+def collect_tsdb(name, idl, label):
     out = []
     for e in tsdb_events(idl):
         start, tbd = parse_tsdb_time(e)
@@ -184,7 +167,7 @@ def collect_tsdb(name, substrs, match_sport, label):
         out.append({
             "id": slug(name, e.get("idEvent")),
             "sport": label,
-            "competition": real or name,
+            "competition": name,
             "date": e.get("dateEvent"), "start": start, "tbd": tbd,
             "home": h, "away": a, "score": score,
             "status": "finished" if score else "scheduled",
@@ -194,14 +177,18 @@ def collect_tsdb(name, substrs, match_sport, label):
         time.sleep(0.4)
     return out
 
-# (name, substrings to resolve, TheSportsDB sport, output sport label)
+# (display name, TheSportsDB league id, output sport label)
+# League ids are targeted directly: all_leagues.php is truncated on the free key,
+# so name resolution silently failed for every league ("league not found").
+# To add a competition: find it on thesportsdb.com, the id is in the page URL
+# (e.g. /league/4849-English-Womens-Super-League -> 4849).
 TSDB_SOURCES = [
-    ("UEFA Champions League",    ["UEFA Champions League"],                              "Soccer", "Football"),
-    ("UEFA Europa League",       ["UEFA Europa League"],                                 "Soccer", "Football"),
-    ("Women's Super League",     ["Women's Super League", "Womens Super League", "WSL"], "Soccer", "Women's football"),
-    ("Women's Champions League", ["Women's Champions League"],                           "Soccer", "Women's football"),
-    ("Women's Euro",             ["Women's Euro", "European Women's Championship"],       "Soccer", "Women's football"),
-    ("FIFA Women's World Cup",   ["Women's World Cup", "Womens World Cup"],              "Soccer", "Women's football"),
+    ("UEFA Champions League", 4480, "Football"),
+    ("UEFA Europa League",    4481, "Football"),
+    ("Women's Super League",  4849, "Women's football"),
+    # ("Women's Champions League", ????, "Women's football"),   # id to confirm
+    # ("FIFA Women's World Cup",   ????, "Women's football"),   # id to confirm — 2027
+    # ("Women's Euro",             ????, "Women's football"),   # dormant until 2029
 ]
 
 # ---------------------------------------------------------------- main
@@ -228,9 +215,9 @@ def main():
             sources.append({"name": name, "sport": "Football", "ok": False, "error": str(e)})
             print(f"[!!] {name}: {e}", file=sys.stderr)
 
-    for name, substrs, msport, label in TSDB_SOURCES:
+    for name, idl, label in TSDB_SOURCES:
         try:
-            rows = collect_tsdb(name, substrs, msport, label)
+            rows = collect_tsdb(name, idl, label)
             matches += rows
             sources.append({"name": name, "sport": label, "ok": True, "count": len(rows)})
             print(f"[ok] {name}: {len(rows)}")
