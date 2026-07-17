@@ -18,7 +18,7 @@ no UTC offset -> interpreted in the source timezone (Europe/London) and stored
 as UTC. World Cup / Euro times carry an explicit "UTC±H" offset.
 """
 
-import json, re, sys, time, urllib.request, urllib.error
+import json, re, sys, time, urllib.request, urllib.error, urllib.parse
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
@@ -168,17 +168,193 @@ def collect_tsdb(name, idl, label):
     return out
 
 # (display name, TheSportsDB league id, output sport label)
-# League ids are targeted directly: all_leagues.php is truncated on the free key,
-# so name resolution silently failed for every league ("league not found").
+# Only the WSL is left here: the free key caps eventsseason.php at the first 15
+# events of a season. That's tolerable for a season not started yet (you get its
+# opening fixtures) but useless once a competition is under way — hence the
+# European cups moved to Wikipedia below.
 # To add a competition: find it on thesportsdb.com, the id is in the page URL
 # (e.g. /league/4849-English-Womens-Super-League -> 4849).
 TSDB_SOURCES = [
-    ("UEFA Champions League", 4480, "Football"),
-    ("UEFA Europa League",    4481, "Football"),
-    ("Women's Super League",  4849, "Women's football"),
-    # ("Women's Champions League", ????, "Women's football"),   # id to confirm
-    # ("FIFA Women's World Cup",   ????, "Women's football"),   # id to confirm — 2027
-    # ("Women's Euro",             ????, "Women's football"),   # dormant until 2029
+    ("Women's Super League", 4849, "Women's football"),
+]
+
+# ---------------------------------------------------------------- Wikipedia (EN)
+# The free TheSportsDB key caps eventsseason.php at the first 15 events of a
+# season, which is useless for a competition already under way. English Wikipedia
+# carries every match in {{Football box}} templates, with kick-off times.
+# Machinery ported from the (proven) rugby scraper in Coup d'envoi.
+WIKI_EN = "https://en.wikipedia.org/w/api.php"
+
+EN_MONTHS = {m.lower(): i for i, m in enumerate(
+    ["January", "February", "March", "April", "May", "June",
+     "July", "August", "September", "October", "November", "December"], 1)}
+
+def wiki_season():
+    now = datetime.now(timezone.utc)
+    y = now.year if now.month >= 6 else now.year - 1
+    return f"{y}\u2013{str(y+1)[2:]}"        # en dash, e.g. "2026–27"
+
+def wiki_wikitext(page):
+    """Raw wikitext of a page, or None when the page doesn't exist yet."""
+    url = (f"{WIKI_EN}?action=parse&page={urllib.parse.quote(page.replace(' ', '_'))}"
+           f"&format=json&prop=wikitext&utf8=1&redirects=1")
+    try:
+        d = get_json(url)
+    except Exception:
+        return None
+    if "parse" not in d:                      # missing page -> {"error": ...}
+        return None
+    return d["parse"]["wikitext"]["*"]
+
+def _fb_extract(wikitext):
+    """Every {{Football box ...}} / {{Footballbox ...}}, brace-matched."""
+    out, low, i = [], wikitext.lower(), 0
+    while True:
+        hits = [h for h in (low.find("{{football box", i), low.find("{{footballbox", i)) if h != -1]
+        if not hits:
+            break
+        idx = min(hits)
+        depth, j = 0, idx
+        while j < len(wikitext):
+            if wikitext[j:j+2] == "{{":
+                depth += 1; j += 2
+            elif wikitext[j:j+2] == "}}":
+                depth -= 1; j += 2
+                if depth == 0:
+                    out.append(wikitext[idx:j]); break
+            else:
+                j += 1
+        i = j if j > idx else idx + 2
+    return out
+
+def _fb_fields(body):
+    """Split template params on top-level pipes (nested {{ }} and [[ ]] safe)."""
+    if body.startswith("{{"): body = body[2:]
+    if body.endswith("}}"): body = body[:-2]
+    parts, current, db, dk, i = [], [], 0, 0, 0
+    while i < len(body):
+        c, nxt = body[i], body[i+1] if i+1 < len(body) else ""
+        if c == "{" and nxt == "{": db += 1; current += [c, nxt]; i += 2; continue
+        if c == "}" and nxt == "}": db -= 1; current += [c, nxt]; i += 2; continue
+        if c == "[" and nxt == "[": dk += 1; current += [c, nxt]; i += 2; continue
+        if c == "]" and nxt == "]": dk -= 1; current += [c, nxt]; i += 2; continue
+        if c == "|" and db == 0 and dk == 0:
+            parts.append("".join(current)); current = []; i += 1; continue
+        current.append(c); i += 1
+    if current:
+        parts.append("".join(current))
+    fields = {}
+    for p in parts[1:]:
+        if "=" in p:
+            k, _, v = p.partition("=")
+            fields[k.strip().lower()] = v.strip()
+    return fields
+
+def _fb_date(text):
+    if not text:
+        return None
+    # {{dts|2026|07|07}} / {{start date|2026|7|7}}
+    m = re.search(r"\{\{\s*(?:dts|start date)[^}]*?\|\s*(\d{4})\s*\|\s*(\d{1,2})\s*\|\s*(\d{1,2})", text, re.I)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    # "7 July 2026"
+    m = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", text)
+    if m and m.group(2).lower() in EN_MONTHS:
+        return f"{int(m.group(3)):04d}-{EN_MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}"
+    # "July 7, 2026"
+    m = re.search(r"([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})", text)
+    if m and m.group(1).lower() in EN_MONTHS:
+        return f"{int(m.group(3)):04d}-{EN_MONTHS[m.group(1).lower()]:02d}-{int(m.group(2)):02d}"
+    return None
+
+def _fb_time(text):
+    if not text:
+        return None
+    m = re.search(r"(\d{1,2})[:.](\d{2})", text)
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
+
+def _fb_team(text):
+    if not text:
+        return None
+    text = text.replace("'''", "")
+    text = re.sub(r"\{\{\s*(?:flagicon|fb|fbicon|fbaicon)[^}]*\}\}", "", text, flags=re.I)
+    m = re.search(r"\[\[[^\]|]+\|([^\]]+)\]\]", text)   # [[Arsenal F.C.|Arsenal]]
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"\[\[([^\]|]+)\]\]", text)            # [[Arsenal]]
+    if m:
+        return m.group(1).strip()
+    text = re.sub(r"\{\{[^}]*\}\}", "", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.strip() or None
+
+def _fb_score(text):
+    if not text:
+        return None
+    text = text.replace("'''", "").strip()
+    m = re.match(r"^\s*(\d+)\s*[-\u2013]\s*(\d+)", text)
+    return f"{m.group(1)}\u2013{m.group(2)}" if m else None
+
+def collect_wiki_football(name, page_base, label):
+    """Merge every Football box across the pages of one competition."""
+    s = wiki_season()
+    pages = ([f"{s} {page_base} qualifying",
+              f"{s} {page_base} league phase",
+              f"{s} {page_base} knockout phase",
+              f"{s} {page_base}"] if page_base != "UEFA Nations League"
+             else [f"{s} UEFA Nations League"])
+    out, seen, pages_ok = [], set(), []
+    for page in pages:
+        wt = wiki_wikitext(page)
+        if not wt:
+            continue
+        pages_ok.append(page)
+        for body in _fb_extract(wt):
+            f = _fb_fields(body)
+            date = _fb_date(f.get("date", ""))
+            home, away = _fb_team(f.get("team1", "")), _fb_team(f.get("team2", ""))
+            if not date or not home or not away:
+                continue
+            key = (date, home, away)
+            if key in seen:
+                continue
+            seen.add(key)
+            start = combine_date_time_cet(date, _fb_time(f.get("time", "")))
+            score = _fb_score(f.get("score", ""))
+            out.append({
+                "id": slug(name, date, home, away),
+                "sport": label, "competition": name,
+                "date": date, "start": start,
+                "tbd": start is None and score is None,
+                "home": home, "away": away, "score": score,
+                "status": "finished" if score else "scheduled",
+                "group": f.get("round") or None,
+                "venue": _fb_team(f.get("stadium", "")) or None,
+            })
+        time.sleep(0.3)
+    return out, pages_ok
+
+def combine_date_time_cet(date_iso, time_str):
+    """UEFA lists kick-off times in CET/CEST -> store as UTC."""
+    if not date_iso or not time_str:
+        return None
+    try:
+        y, mo, d = (int(x) for x in date_iso.split("-"))
+        hh, mm = (int(x) for x in time_str.split(":"))
+        is_dst = 3 < mo < 10 or (mo == 3 and d >= 28) or (mo == 10 and d < 28)
+        local = datetime(y, mo, d, hh, mm, tzinfo=timezone(timedelta(hours=2 if is_dst else 1)))
+        return iso_z(local)
+    except Exception:
+        return None
+
+# (display name, Wikipedia page base, output sport label)
+WIKI_SOURCES = [
+    ("UEFA Champions League", "UEFA Champions League", "Football"),
+    ("UEFA Europa League",    "UEFA Europa League",    "Football"),
+    ("UEFA Nations League",   "UEFA Nations League",   "Football"),
 ]
 
 # ---------------------------------------------------------------- main
@@ -203,6 +379,17 @@ def main():
             print(f"[ok] {name} ({season}): {len(rows)}")
         except Exception as e:
             sources.append({"name": name, "sport": "Football", "ok": False, "error": str(e)})
+            print(f"[!!] {name}: {e}", file=sys.stderr)
+
+    for name, page_base, label in WIKI_SOURCES:
+        try:
+            rows, pages_ok = collect_wiki_football(name, page_base, label)
+            matches += rows
+            sources.append({"name": name, "sport": label, "ok": True,
+                            "count": len(rows), "season": wiki_season()})
+            print(f"[ok] {name}: {len(rows)} (pages: {', '.join(pages_ok) or 'none'})")
+        except Exception as e:
+            sources.append({"name": name, "sport": label, "ok": False, "error": str(e)})
             print(f"[!!] {name}: {e}", file=sys.stderr)
 
     for name, idl, label in TSDB_SOURCES:
