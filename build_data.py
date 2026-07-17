@@ -301,11 +301,16 @@ def _fb_score(text):
 def collect_wiki_football(name, page_base, label):
     """Merge every Football box across the pages of one competition."""
     s = wiki_season()
-    pages = ([f"{s} {page_base} qualifying",
-              f"{s} {page_base} league phase",
-              f"{s} {page_base} knockout phase",
-              f"{s} {page_base}"] if page_base != "UEFA Nations League"
-             else [f"{s} UEFA Nations League"])
+    if page_base == "UEFA Nations League":
+        # The main article only carries standings grids (dates, no kick-off times).
+        # The actual Football boxes live on the per-division articles.
+        pages = [f"{s} UEFA Nations League {d}" for d in ("A", "B", "C", "D")]
+        pages.append(f"{s} UEFA Nations League Finals")
+    else:
+        pages = [f"{s} {page_base} qualifying",
+                 f"{s} {page_base} league phase",
+                 f"{s} {page_base} knockout phase",
+                 f"{s} {page_base}"]
     out, seen, pages_ok = [], set(), []
     for page in pages:
         wt = wiki_wikitext(page)
