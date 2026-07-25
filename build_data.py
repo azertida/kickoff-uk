@@ -306,6 +306,12 @@ def collect_wiki_football(name, page_base, label):
         # The actual Football boxes live on the per-division articles.
         pages = [f"{s} UEFA Nations League {d}" for d in ("A", "B", "C", "D")]
         pages.append(f"{s} UEFA Nations League Finals")
+    elif "Women's" in page_base:
+        # Women's competitions use "qualifying rounds" (not just "qualifying").
+        pages = [f"{s} {page_base} qualifying rounds",
+                 f"{s} {page_base} league phase",
+                 f"{s} {page_base} knockout phase",
+                 f"{s} {page_base}"]
     else:
         pages = [f"{s} {page_base} qualifying",
                  f"{s} {page_base} league phase",
@@ -357,9 +363,10 @@ def combine_date_time_cet(date_iso, time_str):
 
 # (display name, Wikipedia page base, output sport label)
 WIKI_SOURCES = [
-    ("UEFA Champions League", "UEFA Champions League", "Football"),
-    ("UEFA Europa League",    "UEFA Europa League",    "Football"),
-    ("UEFA Nations League",   "UEFA Nations League",   "Football"),
+    ("UEFA Champions League",   "UEFA Champions League",         "Football"),
+    ("UEFA Europa League",      "UEFA Europa League",            "Football"),
+    ("UEFA Nations League",     "UEFA Nations League",           "Football"),
+    ("Women's Champions League","UEFA Women's Champions League", "Women's football"),
 ]
 
 # ---------------------------------------------------------------- main
