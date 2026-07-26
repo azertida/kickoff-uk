@@ -27,8 +27,11 @@ UA = {"User-Agent": "kickoff-uk/1.0 (+github action)"}
 
 def get_json(url):
     # Wikipedia rate-limits (HTTP 429) when many pages are fetched in a row.
-    # Retry with growing back-off before giving up.
-    delay = 1.0
+    # We now query ~24 Wikipedia pages per build (foot + rugby), so a plain retry
+    # isn't enough: we also throttle *before* every Wikipedia call to stay polite.
+    if "wikipedia.org" in url:
+        time.sleep(1.2)
+    delay = 2.0
     for attempt in range(4):
         try:
             req = urllib.request.Request(url, headers=UA)
