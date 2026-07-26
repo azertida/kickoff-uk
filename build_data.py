@@ -570,6 +570,53 @@ def collect_six_nations(year, competition="Six Nations", page_base="Tournoi_des_
             })
     return out
 
+def collect_rugby_wholepage(year, competition, page_base, id_prefix, tz="paris"):
+    # Extraction page entière (pas de sections « journée ») — pour les compétitions
+    # à poules comme la Coupe du monde. tz : fuseau des horaires dans le wikicode.
+    #   "paris" -> heure de Paris (CET/CEST). À VÉRIFIER pour un tournoi hors Europe :
+    #   la Coupe du monde 2027 est en Australie, si les heures sont locales il faudra
+    #   passer tz="sydney" (voir combine_date_time_sydney ci-dessous).
+    page = f"{page_base}_{year}"
+    url = f"{WIKI_API}?action=parse&page={urllib.parse.quote(page)}&format=json&prop=wikitext&utf8=1"
+    data = get_json(url)
+    if "parse" not in data:
+        return []
+    wikitext = data["parse"]["wikitext"]["*"]
+    conv = combine_date_time_sydney if tz == "sydney" else combine_date_time_paris
+    out, seen = [], set()
+    for tpl in _wiki_extract_templates(wikitext):
+        m = _wiki_parse_match_template(tpl)
+        if not m.get("home") or not m.get("away"):
+            continue
+        key = (m["date"], m["home"], m["away"])
+        if key in seen:
+            continue
+        seen.add(key)
+        start_utc = conv(m["date"], m["time_local"]) if m["time_local"] else None
+        out.append({
+            "id": slug(id_prefix, year, m["date"], m["home"], m["away"]),
+            "sport": "Rugby", "competition": competition,
+            "date": m["date"], "start": start_utc,
+            "tbd": start_utc is None and m["score"] is None,
+            "home": m["home"], "away": m["away"], "score": m["score"],
+            "status": "finished" if m["score"] else "scheduled",
+            "group": None, "venue": m["venue"],
+        })
+    return out
+
+def combine_date_time_sydney(date_iso, time_str):
+    # Sydney/Melbourne en oct.-nov. = heure d'été australienne (AEDT, UTC+11).
+    if not date_iso or not time_str:
+        return None
+    try:
+        y, mo, d = (int(x) for x in date_iso.split("-"))
+        hh, mm = (int(x) for x in time_str.split(":"))
+        local = datetime(y, mo, d, hh, mm, tzinfo=timezone(timedelta(hours=11)))
+        return iso_z(local)
+    except Exception:
+        return None
+
+
 def rugby_edition_years():
     y = datetime.now(timezone.utc).year
     return [y + 1, y, y - 1]
@@ -655,6 +702,26 @@ def main():
         except Exception as e:
             sources.append({"name": name, "sport": "Rugby", "ok": False, "error": str(e)})
             print(f"[!!] {name}: {e}", file=sys.stderr)
+
+    # Coupe du monde de rugby 2027 (Australie). Page à poules -> extraction entière.
+    # tz="paris" par défaut : À VÉRIFIER au 1er run contre un match connu
+    # (Australie-Hong Kong, 1 oct. 2027, Perth). Si décalé, passer tz="sydney".
+    try:
+        rwc = collect_rugby_wholepage(
+            2027, competition="Rugby World Cup",
+            page_base="Coupe_du_monde_masculine_de_rugby_à_XV",
+            id_prefix="rwc", tz="paris")
+        matches += rwc
+        entry = {"name": "Rugby World Cup", "sport": "Rugby", "ok": True, "count": len(rwc), "year": 2027}
+        # échantillon pour la vérif horaire
+        if rwc:
+            s = rwc[0]
+            entry["sample"] = f"{s['home']} v {s['away']} {s['date']} start={s['start']}"
+        sources.append(entry)
+        print(f"[ok] Rugby World Cup (2027): {len(rwc)}" + (f"  ex: {entry.get('sample')}" if rwc else ""))
+    except Exception as e:
+        sources.append({"name": "Rugby World Cup", "sport": "Rugby", "ok": False, "error": str(e)})
+        print(f"[!!] Rugby World Cup: {e}", file=sys.stderr)
 
     seen, uniq = set(), []
     for m in matches:
