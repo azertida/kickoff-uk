@@ -30,8 +30,8 @@ def get_json(url):
     # We now query ~24 Wikipedia pages per build (foot + rugby), so a plain retry
     # isn't enough: we also throttle *before* every Wikipedia call to stay polite.
     if "wikipedia.org" in url:
-        time.sleep(1.2)
-    delay = 2.0
+        time.sleep(2.5)
+    delay = 5.0
     for attempt in range(4):
         try:
             req = urllib.request.Request(url, headers=UA)
@@ -624,7 +624,7 @@ def combine_date_time_sydney(date_iso, time_str):
 
 def rugby_edition_years():
     y = datetime.now(timezone.utc).year
-    return [y + 1, y, y - 1]
+    return [y + 1, y]     # édition à venir puis en cours ; y-1 est périmé, inutile
 
 
 # (display name, Wikipedia page base, output sport label)
