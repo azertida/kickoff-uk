@@ -361,6 +361,209 @@ def combine_date_time_cet(date_iso, time_str):
     except Exception:
         return None
 
+
+# ================================================================ RUGBY
+# Moteur porté de Coup d'envoi : lit les {{Match rugby}} sur Wikipédia FR.
+# Les horaires y sont en heure de Paris (CET/CEST) -> stockés en UTC ;
+# l'affichage en heure de Londres est géré par le frontend (TZ=Europe/London).
+MOIS_FR = {
+    "janvier": 1, "février": 2, "mars": 3, "avril": 4,
+    "mai": 5, "juin": 6, "juillet": 7, "août": 8,
+    "septembre": 9, "octobre": 10, "novembre": 11, "décembre": 12,
+}
+
+def combine_date_time_paris(date_iso, time_str):
+    if not date_iso or not time_str:
+        return None
+    try:
+        y, mo, d = (int(x) for x in date_iso.split("-"))
+        hh, mm = (int(x) for x in time_str.split(":"))
+        is_dst = 3 < mo < 10 or (mo == 3 and d >= 28) or (mo == 10 and d < 28)
+        offset_hours = 2 if is_dst else 1
+        local = datetime(y, mo, d, hh, mm, tzinfo=timezone(timedelta(hours=offset_hours)))
+        return iso_z(local)
+    except Exception:
+        return None
+
+WIKI_API = "https://fr.wikipedia.org/w/api.php"
+
+def _wiki_parse_date(text):
+    if not text:
+        return None
+    m = re.search(r"\{\{date\|([^}|]+)", text)
+    if m:
+        text = m.group(1)
+    text = text.strip().lower()
+    m = re.match(r"(\d{1,2})\s+(\w+)\s+(\d{4})", text)
+    if m:
+        day = int(m.group(1))
+        month = MOIS_FR.get(m.group(2))
+        year = int(m.group(3))
+        if month:
+            return f"{year:04d}-{month:02d}-{day:02d}"
+    return None
+
+def _wiki_parse_heure(text):
+    if not text:
+        return None
+    m = re.search(r"\{\{heure\|(\d{1,2})\|(\d{2})", text)
+    if m:
+        return f"{int(m.group(1)):02d}:{m.group(2)}"
+    m = re.match(r"\s*(\d{1,2})[h:](\d{2})", text)
+    if m:
+        return f"{int(m.group(1)):02d}:{m.group(2)}"
+    return None
+
+def _wiki_parse_team(text):
+    if not text:
+        return None
+    text = text.replace("'''", "")
+    m = re.search(r"\{\{([A-Za-zÀ-ÿ\s\-]+?)\s+rugby\s*[|}]", text)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"\[\[(?:Équipe d['e]\s+)?([^\]|]+?)(?:\s+de rugby[^]]*)?(?:\|[^\]]*)?\]\]", text)
+    if m:
+        return m.group(1).strip()
+    text = re.sub(r"\{\{[^}]+\}\}", "", text)
+    text = re.sub(r"\[\[[^]]+\]\]", "", text)
+    return text.strip() or None
+
+def _wiki_parse_score(text):
+    if not text:
+        return None
+    text = text.replace("'''", "").strip()
+    m = re.match(r"^\s*(\d+)\s*[-\u2013]\s*(\d+)", text)
+    if m:
+        return f"{m.group(1)}\u2013{m.group(2)}"
+    return None
+
+def _wiki_parse_lieu(text):
+    if not text:
+        return None
+    # Cas {{Lien|langue=en|Nom du stade}}
+    m = re.search(r"\{\{Lien\|[^}]*\|([^}|]+)\}\}", text)
+    if m:
+        stadium = m.group(1).strip()
+        rest = text[m.end():]
+        m2 = re.search(r"\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]", rest)
+        if m2:
+            city = re.sub(r"\s*\([^)]+\)$", "", m2.group(1).strip())
+            return f"{stadium}, {city}"
+        return stadium
+    # Cas standard [[Stade]], [[Ville]]
+    m = re.search(r"\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]", text)
+    if m:
+        stadium = m.group(1).strip()
+        rest = text[m.end():]
+        m2 = re.search(r"\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]", rest)
+        if m2:
+            city = re.sub(r"\s*\([^)]+\)$", "", m2.group(1).strip())
+            return f"{stadium}, {city}"
+        return stadium
+    return text.strip() or None
+
+def _wiki_parse_match_template(body):
+    if body.startswith("{{"):
+        body = body[2:]
+    if body.endswith("}}"):
+        body = body[:-2]
+    parts, current = [], []
+    depth_braces = depth_brackets = 0
+    i = 0
+    while i < len(body):
+        c, nxt = body[i], body[i+1] if i+1 < len(body) else ""
+        if c == "{" and nxt == "{":
+            depth_braces += 1; current.append(c); current.append(nxt); i += 2; continue
+        if c == "}" and nxt == "}":
+            depth_braces -= 1; current.append(c); current.append(nxt); i += 2; continue
+        if c == "[" and nxt == "[":
+            depth_brackets += 1; current.append(c); current.append(nxt); i += 2; continue
+        if c == "]" and nxt == "]":
+            depth_brackets -= 1; current.append(c); current.append(nxt); i += 2; continue
+        if c == "|" and depth_braces == 0 and depth_brackets == 0:
+            parts.append("".join(current)); current = []; i += 1; continue
+        current.append(c); i += 1
+    if current:
+        parts.append("".join(current))
+    fields = {}
+    for part in parts[1:]:
+        if "=" in part:
+            k, _, v = part.partition("=")
+            fields[k.strip().lower()] = v.strip()
+    return {
+        "date": _wiki_parse_date(fields.get("date", "")),
+        "time_local": _wiki_parse_heure(fields.get("heure", "")),
+        "home": _wiki_parse_team(fields.get("équipe1", "")),
+        "away": _wiki_parse_team(fields.get("équipe2", "")),
+        "score": _wiki_parse_score(fields.get("score", "")),
+        "venue": _wiki_parse_lieu(fields.get("lieu", "")),
+    }
+
+def _wiki_extract_templates(wikitext):
+    out = []
+    i = 0
+    while i < len(wikitext):
+        idx = wikitext.find("{{Match rugby", i)
+        if idx == -1:
+            break
+        depth, j = 0, idx
+        while j < len(wikitext):
+            if wikitext[j:j+2] == "{{":
+                depth += 1; j += 2
+            elif wikitext[j:j+2] == "}}":
+                depth -= 1; j += 2
+                if depth == 0:
+                    out.append(wikitext[idx:j]); break
+            else:
+                j += 1
+        i = j
+    return out
+
+def _wiki_find_section(wikitext, title_pattern):
+    pattern = rf"==+\s*{title_pattern}\s*==+(.+?)(?===+\s*\S)"
+    m = re.search(pattern, wikitext, re.DOTALL)
+    return m.group(1) if m else ""
+
+# Six Nations
+JOURNEES_6N = [
+    ("Première journée", "J1"),
+    ("Deuxième journée", "J2"),
+    ("Troisième journée", "J3"),
+    ("Quatrième journée", "J4"),
+    ("Cinquième journée", "J5"),
+]
+
+def collect_six_nations(year, competition="Six Nations", page_base="Tournoi_des_Six_Nations", id_prefix="six-nations"):
+    page = f"{page_base}_{year}"
+    url = f"{WIKI_API}?action=parse&page={page}&format=json&prop=wikitext&utf8=1"
+    data = get_json(url)
+    wikitext = data["parse"]["wikitext"]["*"]
+    out = []
+    for section_title, phase in JOURNEES_6N:
+        section = _wiki_find_section(wikitext, re.escape(section_title))
+        if not section:
+            continue
+        for tpl in _wiki_extract_templates(section):
+            m = _wiki_parse_match_template(tpl)
+            if not m.get("home") or not m.get("away"):
+                continue
+            start_utc = combine_date_time_paris(m["date"], m["time_local"]) if m["time_local"] else None
+            out.append({
+                "id": slug(id_prefix, year, m["date"], m["home"], m["away"]),
+                "sport": "Rugby", "competition": competition,
+                "date": m["date"], "start": start_utc,
+                "tbd": start_utc is None and m["score"] is None,
+                "home": m["home"], "away": m["away"], "score": m["score"],
+                "status": "finished" if m["score"] else "scheduled",
+                "group": phase, "venue": m["venue"],
+            })
+    return out
+
+def rugby_edition_years():
+    y = datetime.now(timezone.utc).year
+    return [y + 1, y, y - 1]
+
+
 # (display name, Wikipedia page base, output sport label)
 WIKI_SOURCES = [
     ("UEFA Champions League",   "UEFA Champions League",         "Football"),
@@ -412,6 +615,27 @@ def main():
             print(f"[ok] {name}: {len(rows)}")
         except Exception as e:
             sources.append({"name": name, "sport": label, "ok": False, "error": str(e)})
+            print(f"[!!] {name}: {e}", file=sys.stderr)
+
+    # ---- Rugby (Wikipédia FR, {{Match rugby}}) ----
+    # (display name, page base FR, id prefix)
+    RUGBY_6N = [("Six Nations", "Tournoi_des_Six_Nations", "six-nations")]
+    for name, page_base, id_prefix in RUGBY_6N:
+        try:
+            rows, used = [], None
+            for yr in rugby_edition_years():
+                try:
+                    r = collect_six_nations(yr, competition=name, page_base=page_base, id_prefix=id_prefix)
+                except Exception:
+                    r = []
+                if r:
+                    rows, used = r, yr
+                    break
+            matches += rows
+            sources.append({"name": name, "sport": "Rugby", "ok": True, "count": len(rows), "year": used})
+            print(f"[ok] {name} ({used}): {len(rows)}")
+        except Exception as e:
+            sources.append({"name": name, "sport": "Rugby", "ok": False, "error": str(e)})
             print(f"[!!] {name}: {e}", file=sys.stderr)
 
     seen, uniq = set(), []
