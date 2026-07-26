@@ -556,7 +556,7 @@ def collect_six_nations(year, competition="Six Nations", page_base="Tournoi_des_
             continue
         for tpl in _wiki_extract_templates(section):
             m = _wiki_parse_match_template(tpl)
-            if not m.get("home") or not m.get("away"):
+            if not m.get("home") or not m.get("away") or not m.get("date"):
                 continue
             start_utc = combine_date_time_paris(m["date"], m["time_local"]) if m["time_local"] else None
             out.append({
@@ -586,7 +586,7 @@ def collect_rugby_wholepage(year, competition, page_base, id_prefix, tz="paris")
     out, seen = [], set()
     for tpl in _wiki_extract_templates(wikitext):
         m = _wiki_parse_match_template(tpl)
-        if not m.get("home") or not m.get("away"):
+        if not m.get("home") or not m.get("away") or not m.get("date"):
             continue
         key = (m["date"], m["home"], m["away"])
         if key in seen:
@@ -728,7 +728,7 @@ def main():
         if m["id"] in seen:
             continue
         seen.add(m["id"]); uniq.append(m)
-    uniq.sort(key=lambda m: (m.get("start") or (m.get("date", "9999") + "T99")))
+    uniq.sort(key=lambda m: (m.get("start") or ((m.get("date") or "9999") + "T99")))
 
     out = {"generated": iso_z(datetime.now(timezone.utc)), "sources": sources,
            "count": len(uniq), "matches": uniq}
