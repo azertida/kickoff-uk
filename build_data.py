@@ -432,7 +432,7 @@ def _wiki_parse_team(text):
     if not text:
         return None
     text = text.replace("'''", "")
-    m = re.search(r"\{\{([A-Za-zÀ-ÿ\s\-]+?)\s+rugby\s*[|}]", text)
+    m = re.search(r"\{\{([A-Za-zÀ-ÿ\s\-]+?)\s+rugby(?:\s+(?:féminin|masculin|à\s+(?:XV|sept)))?\s*[|}]", text)
     if m:
         return m.group(1).strip()
     m = re.search(r"\[\[(?:Équipe d['e]\s+)?([^\]|]+?)(?:\s+de rugby[^]]*)?(?:\|[^\]]*)?\]\]", text)
