@@ -622,18 +622,22 @@ def main():
     RUGBY_6N = [("Six Nations", "Tournoi_des_Six_Nations", "six-nations")]
     for name, page_base, id_prefix in RUGBY_6N:
         try:
-            rows, used = [], None
+            rows, used, last_err = [], None, None
             for yr in rugby_edition_years():
                 try:
                     r = collect_six_nations(yr, competition=name, page_base=page_base, id_prefix=id_prefix)
-                except Exception:
+                except Exception as e:
                     r = []
+                    last_err = f"{yr}: {type(e).__name__}: {e}"
                 if r:
                     rows, used = r, yr
                     break
             matches += rows
-            sources.append({"name": name, "sport": "Rugby", "ok": True, "count": len(rows), "year": used})
-            print(f"[ok] {name} ({used}): {len(rows)}")
+            entry = {"name": name, "sport": "Rugby", "ok": True, "count": len(rows), "year": used}
+            if not rows and last_err:
+                entry["note"] = last_err          # visible dans matches.json pour diagnostic
+            sources.append(entry)
+            print(f"[ok] {name} ({used}): {len(rows)}  {('- ' + last_err) if (not rows and last_err) else ''}")
         except Exception as e:
             sources.append({"name": name, "sport": "Rugby", "ok": False, "error": str(e)})
             print(f"[!!] {name}: {e}", file=sys.stderr)
