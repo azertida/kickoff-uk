@@ -546,8 +546,10 @@ JOURNEES_6N = [
 
 def collect_six_nations(year, competition="Six Nations", page_base="Tournoi_des_Six_Nations", id_prefix="six-nations"):
     page = f"{page_base}_{year}"
-    url = f"{WIKI_API}?action=parse&page={page}&format=json&prop=wikitext&utf8=1"
+    url = f"{WIKI_API}?action=parse&page={urllib.parse.quote(page)}&format=json&prop=wikitext&utf8=1"
     data = get_json(url)
+    if "parse" not in data:
+        return []
     wikitext = data["parse"]["wikitext"]["*"]
     out = []
     for section_title, phase in JOURNEES_6N:
@@ -680,7 +682,10 @@ def main():
     # on laisse le quota respirer pour limiter le 429.
     time.sleep(2)
     # (display name, page base FR, id prefix)
-    RUGBY_6N = [("Six Nations", "Tournoi_des_Six_Nations", "six-nations")]
+    RUGBY_6N = [
+        ("Six Nations",         "Tournoi_des_Six_Nations",         "six-nations"),
+        ("Women's Six Nations", "Tournoi_des_Six_Nations_féminin", "women-six-nations"),
+    ]
     for name, page_base, id_prefix in RUGBY_6N:
         try:
             rows, used, last_err = [], None, None
