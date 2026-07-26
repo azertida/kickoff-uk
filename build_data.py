@@ -26,9 +26,20 @@ TIMEOUT = 25
 UA = {"User-Agent": "kickoff-uk/1.0 (+github action)"}
 
 def get_json(url):
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return json.loads(r.read().decode("utf-8"))
+    # Wikipedia rate-limits (HTTP 429) when many pages are fetched in a row.
+    # Retry with growing back-off before giving up.
+    delay = 1.0
+    for attempt in range(4):
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 3:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            raise
 
 # ---------------------------------------------------------------- time helpers
 def iso_z(dt):
@@ -618,6 +629,9 @@ def main():
             print(f"[!!] {name}: {e}", file=sys.stderr)
 
     # ---- Rugby (Wikipédia FR, {{Match rugby}}) ----
+    # Pause : le foot a déjà enchaîné une douzaine de pages Wikipédia juste avant,
+    # on laisse le quota respirer pour limiter le 429.
+    time.sleep(2)
     # (display name, page base FR, id prefix)
     RUGBY_6N = [("Six Nations", "Tournoi_des_Six_Nations", "six-nations")]
     for name, page_base, id_prefix in RUGBY_6N:
