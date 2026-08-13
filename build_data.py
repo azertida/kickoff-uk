@@ -45,6 +45,13 @@ def get_json(url):
             raise
 
 # ---------------------------------------------------------------- time helpers
+def get_text(url):
+    if "wikipedia.org" in url:
+        time.sleep(2.5)
+    req = urllib.request.Request(url, headers=UA)
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return r.read().decode("utf-8")
+
 def iso_z(dt):
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -123,16 +130,149 @@ def league_season_candidates():
     return [f"{a}-{str(a+1)[2:]}" for a in yrs]
 
 def collect_openfootball_league(name, code, tz):
+    # Pour chaque saison, la plus récente d'abord : JSON puis source texte.
+    # Sinon le JSON d'une saison passée masquerait le texte de la saison en cours.
+    repo_file = OPENFOOTBALL_TXT.get(code)
     for s in league_season_candidates():
         url = f"https://raw.githubusercontent.com/openfootball/football.json/master/{s}/{code}.json"
         try:
             data = get_json(url)
+            return parse_openfootball(data, name, tz), s
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                continue
-            raise
-        return parse_openfootball(data, name, tz), s
+            if e.code != 404:
+                raise
+        if repo_file:
+            rows = _openfootball_txt_season(name, code, tz, s)
+            if rows:
+                return rows, s
     return [], None
+
+
+# ---------------------------------------------------------------- openfootball (texte)
+# football.json est GÉNÉRÉ à partir des dépôts texte (openfootball/england...).
+# Le texte paraît plusieurs semaines avant sa conversion JSON : on l'utilise en
+# repli pour disposer des calendriers dès le début de saison.
+OPENFOOTBALL_TXT = {
+    "en.1": ("england", "1-premierleague.txt"),
+}
+
+MONTHS = {m: i for i, m in enumerate(
+    ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], 1)}
+
+# "Sun Aug 16 2026" ou "Sun Aug 23" (année omise -> héritée)
+RE_DATE = re.compile(r"^\s*[A-Z][a-z]{2}\s+([A-Z][a-z]{2})\s+(\d{1,2})(?:\s+(\d{4}))?\s*$")
+RE_MATCHDAY = re.compile(r"^\s*[^\w\s]*\s*Matchday\s+(\d+)", re.I)
+# ligne de match : heure optionnelle en tête, puis "A v B" (à venir) ou "A 1-3 (0-3) B" (joué)
+RE_TIME = re.compile(r"^\s*(\d{1,2}):(\d{2})\s+(.*)$")
+RE_PLAYED = re.compile(r"^(.+?)\s{2,}(\d+)\s*-\s*(\d+)(?:\s*\([^)]*\))?\s{2,}(.+?)\s*$")
+RE_UPCOMING = re.compile(r"^(.+?)\s+v\s+(.+?)\s*$")
+
+
+def parse_openfootball_txt(text, competition, tz_name="Europe/Madrid"):
+    """Parse le format texte openfootball (ex: espana/2026-27/1-liga.txt).
+
+    Ce format est la source primaire du projet : il est publié plusieurs
+    semaines avant sa conversion en football.json. Le parser gère les deux
+    états d'une saison :
+      - à venir : "17:00  Equipo A v Equipo B"
+      - jouée   : "19:00   Equipo A  1-3 (0-3)  Equipo B" + lignes de buteurs
+    La date et l'heure sont héritées de la dernière rencontrée (le fichier ne
+    les répète pas pour chaque match d'un même créneau).
+    """
+    out = []
+    cur_date = None          # (year, month, day)
+    cur_time = None          # "HH:MM"
+    matchday = None
+
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+
+        m = RE_MATCHDAY.search(line)
+        if m:
+            matchday = int(m.group(1))
+            cur_time = None
+            continue
+
+        m = RE_DATE.match(line)
+        if m:
+            mon = MONTHS.get(m.group(1))
+            day = int(m.group(2))
+            if m.group(3):
+                # année explicite dans le fichier : elle fait autorité
+                cur_year = int(m.group(3))
+            elif cur_date:
+                # année omise : on la déduit, en basculant au passage déc -> jan
+                cur_year = cur_date[0] + 1 if (mon < cur_date[1] and cur_date[1] == 12) else cur_date[0]
+            else:
+                cur_year = None
+            if mon and cur_year:
+                cur_date = (cur_year, mon, day)
+            cur_time = None
+            continue
+
+        if cur_date is None:
+            continue
+
+        body = line
+        m = RE_TIME.match(line)
+        if m:
+            cur_time = f"{int(m.group(1)):02d}:{m.group(2)}"
+            body = m.group(3)
+
+        body = body.strip()
+        if not body or body.startswith("(") or body.startswith("#") or body.startswith("="):
+            continue        # ligne de buteurs / entête
+
+        home = away = score = None
+        m = RE_PLAYED.match(body)
+        if m:
+            home, away = m.group(1).strip(), m.group(4).strip()
+            score = f"{m.group(2)}\u2013{m.group(3)}"
+        else:
+            m = RE_UPCOMING.match(body)
+            if m:
+                home, away = m.group(1).strip(), m.group(2).strip()
+        if not home or not away:
+            continue
+
+        date_iso = f"{cur_date[0]:04d}-{cur_date[1]:02d}-{cur_date[2]:02d}"
+        out.append({
+            "date": date_iso,
+            "time_local": cur_time,
+            "home": home, "away": away,
+            "score": score,
+            "matchday": matchday,
+            "competition": competition,
+        })
+    return out
+
+
+def _openfootball_txt_season(name, code, tz, season):
+    """Lit la source texte pour UNE saison donnée (repli quand le JSON manque)."""
+    repo, fname = OPENFOOTBALL_TXT[code]
+    url = f"https://raw.githubusercontent.com/openfootball/{repo}/master/{season}/{fname}"
+    try:
+        txt = get_text(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []
+        raise
+    rows = []
+    for m in parse_openfootball_txt(txt, name, tz):
+        start, tbd = parse_openfootball_time(m["date"], m["time_local"], tz)
+        rows.append({
+            "id": slug(code, m["date"], m["home"], m["away"]),
+            "sport": "Football", "competition": name,
+            "date": m["date"], "start": start,
+            "tbd": tbd and m["score"] is None,
+            "home": m["home"], "away": m["away"], "score": m["score"],
+            "status": "finished" if m["score"] else "scheduled",
+            "group": f"MD{m['matchday']}" if m.get("matchday") else None,
+            "venue": None,
+        })
+    return rows
 
 OPENFOOTBALL_LEAGUES = [
     ("Premier League", "en.1", "Europe/London"),
