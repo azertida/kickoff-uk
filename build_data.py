@@ -154,6 +154,7 @@ def collect_openfootball_league(name, code, tz):
 # repli pour disposer des calendriers dès le début de saison.
 OPENFOOTBALL_TXT = {
     "en.1": ("england", "1-premierleague.txt"),
+    "en.2": ("england", "2-championship.txt"),
 }
 
 MONTHS = {m: i for i, m in enumerate(
@@ -276,6 +277,7 @@ def _openfootball_txt_season(name, code, tz, season):
 
 OPENFOOTBALL_LEAGUES = [
     ("Premier League", "en.1", "Europe/London"),
+    ("Championship",   "en.2", "Europe/London"),
 ]
 
 # ---------------------------------------------------------------- TheSportsDB
@@ -460,6 +462,9 @@ def collect_wiki_football(name, page_base, label):
         # The actual Football boxes live on the per-division articles.
         pages = [f"{s} UEFA Nations League {d}" for d in ("A", "B", "C", "D")]
         pages.append(f"{s} UEFA Nations League Finals")
+    elif page_base == "FA Cup":
+        # Coupe à élimination directe : une seule page par saison.
+        pages = [f"{s} {page_base}"]
     elif "Women's" in page_base:
         # Women's competitions use "qualifying rounds" (not just "qualifying").
         pages = [f"{s} {page_base} qualifying rounds",
@@ -772,6 +777,7 @@ WIKI_SOURCES = [
     ("UEFA Champions League",   "UEFA Champions League",         "Football"),
     ("UEFA Europa League",      "UEFA Europa League",            "Football"),
     ("UEFA Nations League",     "UEFA Nations League",           "Football"),
+    ("FA Cup",                  "FA Cup",                        "Football"),
     ("Women's Champions League","UEFA Women's Champions League", "Women's football"),
 ]
 
