@@ -233,8 +233,8 @@ function inRange(d){
 }
 
 /* ---- équipes suivies ---- */
-// Everton (hommes et femmes)
-const FAVS = ["Everton"];
+// Everton (hommes et femmes) + sélection d'Angleterre (foot et rugby)
+const FAVS = ["Everton", "England", "Angleterre"];   // Angleterre = graphie rugby
 const isFav = n => { const s = (n||"").toLowerCase();
   return FAVS.some(f => s.includes(f.toLowerCase())); };
 const teamHtml = n => isFav(n) ? `<span class="fav">${esc(n)}</span>` : esc(n);
