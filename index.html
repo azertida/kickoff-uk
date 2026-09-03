@@ -105,6 +105,10 @@
   .empty strong{color:var(--text);display:block;margin-bottom:6px;font-weight:500}
 
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  /* équipes suivies : mise en évidence (sans décalage de mise en page) */
+  .match.fav-match{box-shadow:inset 3px 0 0 var(--accent);background:linear-gradient(90deg,rgba(255,214,107,.07),transparent 55%)}
+  .teams .fav{color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
@@ -228,6 +232,13 @@ function inRange(d){
   return dayKey(d) >= todayKey;   // upcoming
 }
 
+/* ---- équipes suivies ---- */
+// Everton (hommes et femmes)
+const FAVS = ["Everton"];
+const isFav = n => { const s = (n||"").toLowerCase();
+  return FAVS.some(f => s.includes(f.toLowerCase())); };
+const teamHtml = n => isFav(n) ? `<span class="fav">${esc(n)}</span>` : esc(n);
+
 function renderAgenda(){
   if(!data || !data.matches) return;
 
@@ -260,13 +271,14 @@ function renderAgenda(){
       const left = m.score
         ? `<span class="score">${esc(m.score)}</span>`
         : (m.tbd ? '<span class="tbd">TBC</span>' : hhmm(d));
-      const away = m.away ? `<span class="vs">vs</span>${esc(m.away)}` : "";
+      const away = m.away ? `<span class="vs">vs</span>${teamHtml(m.away)}` : "";
+      const favRow = isFav(m.home) || isFav(m.away);
       const grp  = m.group ? " · " + esc(m.group) : "";
       const cd = countdown(d);
-      html += `<div class="match">
+      html += `<div class="match${favRow ? " fav-match" : ""}">
         <div class="kickoff">${left}</div>
         <div class="match-body">
-          <div class="teams">${esc(m.home||"—")}${away}</div>
+          <div class="teams">${m.home ? teamHtml(m.home) : "—"}${away}</div>
           <div class="match-meta"><span class="sport-tag">${esc(m.sport)}</span> · ${esc(m.competition)}${grp}</div>
         </div>
         <div class="countdown ${cd.cls}">${m.score?"finished":cd.txt}</div>
