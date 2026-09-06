@@ -162,7 +162,9 @@ async function loadData(){
 
 function renderMeta(){
   const gen = data.generated ? new Intl.DateTimeFormat("en-GB",{timeZone:TZ,day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(data.generated)) : "—";
-  const srcs = (data.sources||[]).map(s =>
+  const srcs = (data.sources||[]).slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }))
+    .map(s =>
     `<span class="src ${s.ok?"ok":"ko"}"><span class="d"></span>${esc(s.name)}${s.ok?` (${s.count})`:""}</span>`
   ).join("");
   $("metaLine").innerHTML = `<span>updated ${gen}</span>${srcs}`;
