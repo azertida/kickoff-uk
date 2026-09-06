@@ -781,6 +781,136 @@ WIKI_SOURCES = [
     ("Women's Champions League","UEFA Women's Champions League", "Women's football"),
 ]
 
+
+# ================================================================ WXV (rugby féminin)
+# Wikipédia EN, page "<année> WXV" : les rencontres y sont en lignes de TABLEAU
+# (pas en {{Match rugby}}), avec des codes pays {{ruw|XXX}}.
+WIKI_EN_API = "https://en.wikipedia.org/w/api.php"
+
+EN_MONTHS = {m: i for i, m in enumerate(
+    ["January", "February", "March", "April", "May", "June",
+     "July", "August", "September", "October", "November", "December"], 1)}
+
+# codes pays du modèle {{ruw|XXX}} — la source mêle JPN/JAP, HKG/HK, NED/NDL
+WXV_TEAMS_FR = {
+    "AUS": "Australie", "CAN": "Canada", "ENG": "Angleterre", "FRA": "France",
+    "IRE": "Irlande", "ITA": "Italie", "JPN": "Japon", "JAP": "Japon",
+    "NZL": "Nouvelle-Zélande", "SCO": "Écosse", "RSA": "Afrique du Sud",
+    "USA": "États-Unis", "WAL": "Pays de Galles", "ESP": "Espagne",
+    "BRA": "Brésil", "FIJ": "Fidji", "HKG": "Hong Kong", "HK": "Hong Kong",
+    "NED": "Pays-Bas", "NDL": "Pays-Bas", "SAM": "Samoa",
+}
+
+WXV_TEAMS_EN = {
+    "AUS": "Australia", "CAN": "Canada", "ENG": "England", "FRA": "France",
+    "IRE": "Ireland", "ITA": "Italy", "JPN": "Japan", "JAP": "Japan",
+    "NZL": "New Zealand", "SCO": "Scotland", "RSA": "South Africa",
+    "USA": "United States", "WAL": "Wales", "ESP": "Spain",
+    "BRA": "Brazil", "FIJ": "Fiji", "HKG": "Hong Kong", "HK": "Hong Kong",
+    "NED": "Netherlands", "NDL": "Netherlands", "SAM": "Samoa",
+}
+
+# une ligne de rencontre : heure optionnelle, date, équipe1, équipe2, lieu
+RE_ROW = re.compile(
+    r"\|align=right\|\s*(?:(\d{1,2}):(\d{2})\s*<br\s*/?>\s*)?"      # heure (Challenger)
+    r"(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})"                          # 12 September 2026
+    r"\s*\|\|align=right\|\s*\{\{ruw-rt\|([A-Za-z]+)[^}]*\}\}"       # équipe à domicile
+    r"\s*\|\|align=center\|.*?"                                      # cellule « v »
+    r"\|\|\s*\{\{ruw\|([A-Za-z]+)[^}]*\}\}"                          # équipe visiteuse
+    r"(?:\s*\|\|\s*(.*?))?\s*$",                                     # lieu (optionnel)
+    re.MULTILINE)
+
+
+def _clean_venue(raw):
+    if not raw:
+        return None
+    v = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]", r"\1", raw)   # [[A|B]] -> B
+    v = re.sub(r"\[\[([^\]]*)\]\]", r"\1", v)              # [[A]]   -> A
+    v = re.sub(r"\s+", " ", v).strip(" ,")
+    return v or None
+
+
+def parse_wxv(wikitext, names):
+    """Retourne (matchs Global Series, matchs Challenger)."""
+    split = wikitext.find("==WXV Global Series Challenger==")
+    if split == -1:
+        parts = [("WXV Global Series", wikitext)]
+    else:
+        parts = [("WXV Global Series", wikitext[:split]),
+                 ("WXV Challenger", wikitext[split:])]
+
+    out = {}
+    for comp, chunk in parts:
+        rows, seen = [], set()
+        for m in RE_ROW.finditer(chunk):
+            hh, mm, day, mon_en, year, home_c, away_c, venue = m.groups()
+            mon = EN_MONTHS.get(mon_en)
+            if not mon:
+                continue
+            home, away = names.get(home_c), names.get(away_c)
+            if not home or not away:
+                continue                       # code pays inconnu -> on ignore
+            date = f"{int(year):04d}-{mon:02d}-{int(day):02d}"
+            key = (date, home, away)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({
+                "date": date,
+                "time_local": f"{int(hh):02d}:{mm}" if hh else None,
+                "home": home, "away": away,
+                "venue": _clean_venue(venue),
+            })
+        out[comp] = rows
+    return out
+
+
+def combine_date_time_hongkong(date_iso, time_str):
+    """Le Challenger se joue à Hong Kong (UTC+8, pas d'heure d'été)."""
+    if not date_iso or not time_str:
+        return None
+    try:
+        y, mo, d = (int(x) for x in date_iso.split("-"))
+        hh, mm = (int(x) for x in time_str.split(":"))
+        local = datetime(y, mo, d, hh, mm, tzinfo=timezone(timedelta(hours=8)))
+        return iso_z(local)
+    except Exception:
+        return None
+
+def collect_wxv(names, wanted, id_prefix="wxv"):
+    """wanted : libellés de compétition à retenir -> {clé parseur: nom affiché}."""
+    for year in (datetime.now(timezone.utc).year + 1, datetime.now(timezone.utc).year):
+        page = f"{year}_WXV"
+        url = (f"{WIKI_EN_API}?action=parse&page={page}"
+               f"&format=json&prop=wikitext&utf8=1&redirects=1")
+        try:
+            data = get_json(url)
+        except Exception:
+            continue
+        if "parse" not in data:
+            continue
+        parsed = parse_wxv(data["parse"]["wikitext"]["*"], names)
+        rows = []
+        for key, label in wanted.items():
+            for m in parsed.get(key, []):
+                # Global Series : heures non publiées -> date seule.
+                # Challenger : heures locales de Hong Kong.
+                start = (combine_date_time_hongkong(m["date"], m["time_local"])
+                         if m["time_local"] else None)
+                rows.append({
+                    "id": slug(id_prefix, year, m["date"], m["home"], m["away"]),
+                    "sport": "Rugby", "competition": label,
+                    "date": m["date"], "start": start,
+                    "tbd": start is None,
+                    "home": m["home"], "away": m["away"], "score": None,
+                    "status": "scheduled",
+                    "group": None, "venue": m["venue"],
+                })
+        if rows:
+            return rows, year
+    return [], None
+
+
 # ---------------------------------------------------------------- main
 def main():
     matches, sources = [], []
@@ -903,6 +1033,23 @@ def main():
     except Exception as e:
         sources.append({"name": "Rugby World Cup", "sport": "Rugby", "ok": False, "error": str(e)})
         print(f"[!!] Rugby World Cup: {e}", file=sys.stderr)
+
+
+    # WXV (rugby féminin) — Wikipédia EN, tableaux de rencontres
+    try:
+        rows, yr = collect_wxv(WXV_TEAMS_EN, {"WXV Global Series": "WXV Global Series", "WXV Challenger": "WXV Challenger"})
+        matches += rows
+        from collections import Counter as _C
+        for comp, n in _C(m["competition"] for m in rows).items():
+            sources.append({"name": comp, "sport": "Rugby", "ok": True, "count": n, "year": yr})
+            print(f"[ok] {comp} ({yr}): {n}")
+        if not rows:
+            for comp in {"WXV Global Series": "WXV Global Series", "WXV Challenger": "WXV Challenger"}.values():
+                sources.append({"name": comp, "sport": "Rugby", "ok": True, "count": 0, "year": yr})
+                print(f"[ok] {comp} ({yr}): 0")
+    except Exception as e:
+        sources.append({"name": "WXV", "sport": "Rugby", "ok": False, "error": str(e)})
+        print(f"[!!] WXV: {e}", file=sys.stderr)
 
     seen, uniq = set(), []
     for m in matches:
