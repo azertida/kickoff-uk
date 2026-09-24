@@ -996,10 +996,13 @@ RP_VERS_FR = {
 }
 
 # nos noms (EN ou FR) ramenés à la même clé que RugbyPass
+# Clé canonique = le nom français. Indispensable quand plusieurs noms anglais
+# désignent le même pays ("United States" / "USA") : sans cela ils reçoivent
+# des clés différentes et ne s'apparient jamais.
 _ALIAS = {}
 for _en, _fr in RP_VERS_FR.items():
-    _ALIAS[_en.casefold()] = _en.casefold()
-    _ALIAS[_fr.casefold()] = _en.casefold()
+    _ALIAS[_en.casefold()] = _fr.casefold()
+    _ALIAS[_fr.casefold()] = _fr.casefold()
 
 def _norm_equipe(nom):
     """'New Zealand Women' et 'Nouvelle-Zélande' -> même clé d'appariement."""
