@@ -188,7 +188,11 @@ function renderChips(){
   if(compFilter !== "all" && !comps.includes(compFilter)){   // compétition devenue dormante
     compFilter = "all"; localStorage.setItem(LS.comp, "all");
   }
-  const chips = [["all","All"], ...comps.map(c => [c, c])];
+  // compétitions triées alphabétiquement : lignes mieux remplies,
+  // et les futures compétitions se rangent toutes seules
+  const chips = [["all","All"], ...comps.slice()
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map(c => [c, c])];
   $("sportChips").innerHTML = chips.map(([v,l]) =>
     `<button class="chip ${compFilter===v?"active":""}" data-comp="${esc(v)}">${esc(l)}</button>`
   ).join("");
