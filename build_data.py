@@ -995,14 +995,19 @@ RP_VERS_FR = {
     "Zimbabwe": "Zimbabwe", "Argentina": "Argentine",
 }
 
+# nos noms (EN ou FR) ramenés à la même clé que RugbyPass
+_ALIAS = {}
+for _en, _fr in RP_VERS_FR.items():
+    _ALIAS[_en.casefold()] = _en.casefold()
+    _ALIAS[_fr.casefold()] = _en.casefold()
+
 def _norm_equipe(nom):
-    """'New Zealand Women' -> 'nouvelle-zélande' (clé d'appariement)."""
+    """'New Zealand Women' et 'Nouvelle-Zélande' -> même clé d'appariement."""
     n = (nom or "").strip()
     for suff in (" Women", " Men"):
         if n.endswith(suff):
             n = n[: -len(suff)]
-    n = RP_VERS_FR.get(n, n)
-    return n.casefold()
+    return _ALIAS.get(n.casefold(), n.casefold())
 
 def index_rugbypass(uris):
     """{(jour, {équipe1, équipe2}): epoch} pour compléter les horaires."""
