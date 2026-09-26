@@ -73,6 +73,12 @@ Wikipédia date sans horaire. Les noms y sont anglais avec suffixe
 
 ## 4. Pièges déjà rencontrés
 
+- **Extraction interrompue en cours de page** : un bloc de match aux accolades
+  déséquilibrées faisait perdre **tous les matchs suivants** de la page (la
+  recherche du `}}` fermant parcourait le reste du texte sans rien trouver).
+  Symptôme : une compétition remonte partiellement, avec des équipes entières
+  absentes. Corrigé par une borne de 8 000 caractères : un bloc fautif ne
+  coûte plus qu'un match.
 - **Collision de noms** : deux blocs de code définissaient `EN_MONTHS`, le
   second (WXV) écrasait le premier (football) et cassait silencieusement
   l'analyse des dates en toutes lettres. Renommé `WXV_MONTHS`.

@@ -374,17 +374,22 @@ def _fb_extract(wikitext):
         if not hits:
             break
         idx = min(hits)
-        depth, j = 0, idx
-        while j < len(wikitext):
+        # Un bloc de match ne dépasse jamais quelques milliers de caractères.
+        # Sans cette borne, des accolades déséquilibrées font parcourir tout le
+        # reste de la page : le bloc fautif ferait alors perdre TOUS les matchs
+        # suivants. Ici il n'en coûte qu'un, et l'analyse reprend juste après.
+        fin = min(len(wikitext), idx + 8000)
+        depth, j, ferme = 0, idx, False
+        while j < fin:
             if wikitext[j:j+2] == "{{":
                 depth += 1; j += 2
             elif wikitext[j:j+2] == "}}":
                 depth -= 1; j += 2
                 if depth == 0:
-                    out.append(wikitext[idx:j]); break
+                    out.append(wikitext[idx:j]); ferme = True; break
             else:
                 j += 1
-        i = j if j > idx else idx + 2
+        i = j if ferme else idx + 2
     return out
 
 def _fb_fields(body):
@@ -1020,6 +1025,27 @@ def rp_matchs(uri):
                     })
     return out
 
+
+def collect_rugbypass(uri, competition, id_prefix):
+    """Source principale : construit directement les matchs de l'appli.
+    Les noms RugbyPass sont déjà en anglais : pas de traduction ici."""
+    rows = []
+    for m in rp_matchs(uri):
+        dt = datetime.fromtimestamp(m["epoch"], tz=timezone.utc)
+        date = dt.strftime("%Y-%m-%d")
+        score = (f"{m['hs']}\u2013{m['as']}"
+                 if m["played"] and m["hs"] is not None else None)
+        rows.append({
+            "id": slug(id_prefix, date, m["home"], m["away"]),
+            "sport": "Rugby", "competition": competition,
+            "date": date, "start": iso_z(dt),
+            "tbd": False,
+            "home": m["home"], "away": m["away"], "score": score,
+            "status": "finished" if score else "scheduled",
+            "group": m["round"], "venue": m["venue"],
+        })
+    return rows
+
 # --- complément horaire -------------------------------------------------
 # Noms RugbyPass -> noms utilisés par nos collecteurs Wikipédia (FR).
 RP_VERS_FR = {
@@ -1211,18 +1237,28 @@ def main():
     # tz="paris" par défaut : À VÉRIFIER au 1er run contre un match connu
     # (Australie-Hong Kong, 1 oct. 2027, Perth). Si décalé, passer tz="sydney".
     try:
-        rwc = collect_rugby_wholepage(
-            2027, competition="Rugby World Cup",
-            page_base="Coupe_du_monde_masculine_de_rugby_à_XV",
-            id_prefix="rwc", tz="paris")
+        # RugbyPass d'abord : World Rugby a publié le calendrier, pas Wikipédia.
+        rwc, provenance = [], None
+        try:
+            rwc = collect_rugbypass("rugby-world-cup", "Rugby World Cup", "rwc")
+            provenance = "RugbyPass"
+        except Exception as e:
+            print(f"  [!] RugbyPass Rugby World Cup: {e}", file=sys.stderr)
+        if not rwc:
+            provenance = "Wikipédia"
+            rwc = collect_rugby_wholepage(
+                2027, competition="Rugby World Cup",
+                page_base="Coupe_du_monde_masculine_de_rugby_à_XV",
+                id_prefix="rwc", tz="paris")
         matches += rwc
-        entry = {"name": "Rugby World Cup", "sport": "Rugby", "ok": True, "count": len(rwc), "year": 2027}
+        entry = {"name": "Rugby World Cup", "sport": "Rugby", "ok": True,
+                 "count": len(rwc), "year": 2027, "source": provenance}
         # échantillon pour la vérif horaire
         if rwc:
             s = rwc[0]
             entry["sample"] = f"{s['home']} v {s['away']} {s['date']} start={s['start']}"
         sources.append(entry)
-        print(f"[ok] Rugby World Cup (2027): {len(rwc)}" + (f"  ex: {entry.get('sample')}" if rwc else ""))
+        print(f"[ok] Rugby World Cup (2027, {provenance}): {len(rwc)}" + (f"  ex: {entry.get('sample')}" if rwc else ""))
     except Exception as e:
         sources.append({"name": "Rugby World Cup", "sport": "Rugby", "ok": False, "error": str(e)})
         print(f"[!!] Rugby World Cup: {e}", file=sys.stderr)
