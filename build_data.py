@@ -362,18 +362,24 @@ def wiki_wikitext(page):
         return None
     return d["parse"]["wikitext"]["*"]
 
+# {{Football box}}, {{Footballbox}} et {{#invoke:Football box|main}} :
+# Wikipédia écrit les matchs de ces trois façons selon les articles.
+_RE_FB_DEBUT = re.compile(r"\{\{\s*(?:#invoke:\s*)?football\s?box", re.I)
+
 def _fb_extract(wikitext):
-    """Every {{Football box ...}} / {{Footballbox ...}}, brace-matched."""
-    out, low, i = [], wikitext.lower(), 0
+    """Every {{Football box ...}} / {{Footballbox ...}}, brace-matched.
+
+    La recherche se fait par expression régulière insensible à la casse, et
+    NON sur une copie en minuscules : certains caractères changent de longueur
+    une fois minusculés (le İ turc devient deux caractères), ce qui décalait
+    toutes les positions suivantes et amputait le reste de la page.
+    """
+    out, i = [], 0
     while True:
-        # Wikipédia écrit désormais certains matchs via un module Lua :
-        # {{#invoke:Football box|main|...}} au lieu de {{Football box|...}}.
-        hits = [h for h in (low.find("{{football box", i),
-                            low.find("{{footballbox", i),
-                            low.find("{{#invoke:football box", i)) if h != -1]
-        if not hits:
+        mo = _RE_FB_DEBUT.search(wikitext, i)
+        if not mo:
             break
-        idx = min(hits)
+        idx = mo.start()
         # Un bloc de match ne dépasse jamais quelques milliers de caractères.
         # Sans cette borne, des accolades déséquilibrées font parcourir tout le
         # reste de la page : le bloc fautif ferait alors perdre TOUS les matchs

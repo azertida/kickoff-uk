@@ -79,6 +79,15 @@ Wikipédia date sans horaire. Les noms y sont anglais avec suffixe
   Symptôme : une compétition remonte partiellement, avec des équipes entières
   absentes. Corrigé par une borne de 8 000 caractères : un bloc fautif ne
   coûte plus qu'un match.
+- **Décalage dû à `.lower()`** : l'extracteur cherchait les blocs dans une copie
+  minusculée du wikicode. Or certains caractères changent de **longueur** une
+  fois minusculés — le `İ` turc devient deux caractères. À partir du premier
+  `İ` de la page (ici `[[İzmit]]`), toutes les positions étaient décalées d'un
+  cran et le reste de la page était perdu. Symptôme : une compétition ne
+  remonte que ses premiers matchs. Corrigé par une recherche par expression
+  régulière insensible à la casse, sans copie minusculée.
+  **Règle à retenir** : ne jamais indexer un texte original avec des positions
+  calculées sur sa version minusculée.
 - **Collision de noms** : deux blocs de code définissaient `EN_MONTHS`, le
   second (WXV) écrasait le premier (football) et cassait silencieusement
   l'analyse des dates en toutes lettres. Renommé `WXV_MONTHS`.
