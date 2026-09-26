@@ -102,6 +102,13 @@ Wikipédia date sans horaire. Les noms y sont anglais avec suffixe
 
 ---
 
+- **Lignes de tableau qui évoluent en cours de compétition** : dans la WXV,
+  Wikipédia ajoute au fil des journées des notes (`{{efn|...}}` pour un report
+  météo), les scores, ou la mention *Cancelled*. Une expression régulière
+  monolithique échouait alors sur toute la journée. Les lignes sont désormais
+  découpées en cellules sur `||`, ce qui tolère ces ajouts — et permet au
+  passage de récupérer les scores et d'écarter les matchs annulés.
+
 ## 5. En attente (rien à faire, se remplira seul)
 
 - **FA Cup** — premier tour en novembre

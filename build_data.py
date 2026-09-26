@@ -863,27 +863,22 @@ WXV_TEAMS_EN = {
 }
 
 # une ligne de rencontre : heure optionnelle, date, équipe1, équipe2, lieu
-RE_ROW = re.compile(
-    r"\|align=right\|\s*(?:(\d{1,2}):(\d{2})\s*<br\s*/?>\s*)?"      # heure (Challenger)
-    r"(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})"                          # 12 September 2026
-    r"\s*\|\|align=right\|\s*\{\{ruw-rt\|([A-Za-z]+)[^}]*\}\}"       # équipe à domicile
-    r"\s*\|\|align=center\|.*?"                                      # cellule « v »
-    r"\|\|\s*\{\{ruw\|([A-Za-z]+)[^}]*\}\}"                          # équipe visiteuse
-    r"(?:\s*\|\|\s*(.*?))?\s*$",                                     # lieu (optionnel)
-    re.MULTILINE)
-
-
-def _clean_venue(raw):
-    if not raw:
-        return None
-    v = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]", r"\1", raw)   # [[A|B]] -> B
-    v = re.sub(r"\[\[([^\]]*)\]\]", r"\1", v)              # [[A]]   -> A
-    v = re.sub(r"\s+", " ", v).strip(" ,")
-    return v or None
+RE_LIGNE = re.compile(r"^\|align=right\|", re.I)
+RE_DATE_EN = re.compile(r"(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})")
+RE_HEURE = re.compile(r"(\d{1,2}):(\d{2})")
+RE_DOM = re.compile(r"\{\{ruw-rt\|([A-Za-z]+)")
+RE_EXT = re.compile(r"\{\{ruw\|([A-Za-z]+)")
+RE_SCORE = re.compile(r"(\d{1,3})\s*[-\u2013]\s*(\d{1,3})")
 
 
 def parse_wxv(wikitext, names):
-    """Retourne (matchs Global Series, matchs Challenger)."""
+    """Retourne (matchs Global Series, matchs Challenger).
+
+    Les lignes sont découpées en cellules sur "||" plutôt qu'analysées d'un
+    bloc : Wikipédia y ajoute au fil des journées des notes ({{efn|...}}),
+    des scores ou des mentions d'annulation, qui faisaient échouer une
+    expression régulière monolithique.
+    """
     split = wikitext.find("==WXV Global Series Challenger==")
     if split == -1:
         parts = [("WXV Global Series", wikitext)]
@@ -894,27 +889,57 @@ def parse_wxv(wikitext, names):
     out = {}
     for comp, chunk in parts:
         rows, seen = [], set()
-        for m in RE_ROW.finditer(chunk):
-            hh, mm, day, mon_en, year, home_c, away_c, venue = m.groups()
-            mon = WXV_MONTHS.get(mon_en)
+        for ligne in chunk.splitlines():
+            if not RE_LIGNE.match(ligne.strip()):
+                continue
+            cells = ligne.split("||")
+            # cellule 0 : heure éventuelle + date
+            md = RE_DATE_EN.search(cells[0])
+            if not md:
+                continue
+            mon = WXV_MONTHS.get(md.group(2))
             if not mon:
                 continue
-            home, away = names.get(home_c), names.get(away_c)
-            if not home or not away:
-                continue                       # code pays inconnu -> on ignore
-            date = f"{int(year):04d}-{mon:02d}-{int(day):02d}"
-            key = (date, home, away)
-            if key in seen:
+            date = f"{int(md.group(3)):04d}-{mon:02d}-{int(md.group(1)):02d}"
+            avant = cells[0][: md.start()]          # l'heure précède la date
+            mh = RE_HEURE.search(avant)
+            heure = f"{int(mh.group(1)):02d}:{mh.group(2)}" if mh else None
+            # équipes : cellule contenant {{ruw-rt|XXX}} puis {{ruw|XXX}}
+            i_dom = next((i for i, c in enumerate(cells) if RE_DOM.search(c)), None)
+            if i_dom is None:
                 continue
-            seen.add(key)
-            rows.append({
-                "date": date,
-                "time_local": f"{int(hh):02d}:{mm}" if hh else None,
-                "home": home, "away": away,
-                "venue": _clean_venue(venue),
-            })
+            i_ext = next((i for i in range(i_dom + 1, len(cells))
+                          if RE_EXT.search(cells[i])), None)
+            if i_ext is None:
+                continue
+            home = names.get(RE_DOM.search(cells[i_dom]).group(1))
+            away = names.get(RE_EXT.search(cells[i_ext]).group(1))
+            if not home or not away:
+                continue
+            # cellule intermédiaire : "v", un score, ou une annulation
+            milieu = " ".join(cells[i_dom + 1 : i_ext])
+            if re.search(r"cancell?ed|annul", milieu, re.I):
+                continue                            # match annulé : on l'écarte
+            ms = RE_SCORE.search(milieu)
+            score = f"{ms.group(1)}\u2013{ms.group(2)}" if ms else None
+            venue = _clean_venue(cells[i_ext + 1]) if i_ext + 1 < len(cells) else None
+            cle = (date, home, away)
+            if cle in seen:
+                continue
+            seen.add(cle)
+            rows.append({"date": date, "time_local": heure, "home": home,
+                         "away": away, "venue": venue, "score": score})
         out[comp] = rows
     return out
+
+
+def _clean_venue(raw):
+    if not raw:
+        return None
+    v = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]", r"\1", raw)   # [[A|B]] -> B
+    v = re.sub(r"\[\[([^\]]*)\]\]", r"\1", v)              # [[A]]   -> A
+    v = re.sub(r"\s+", " ", v).strip(" ,")
+    return v or None
 
 
 def combine_date_time_hongkong(date_iso, time_str):
@@ -954,8 +979,9 @@ def collect_wxv(names, wanted, id_prefix="wxv"):
                     "sport": "Rugby", "competition": label,
                     "date": m["date"], "start": start,
                     "tbd": start is None,
-                    "home": m["home"], "away": m["away"], "score": None,
-                    "status": "scheduled",
+                    "home": m["home"], "away": m["away"],
+                    "score": m.get("score"),
+                    "status": "finished" if m.get("score") else "scheduled",
                     "group": None, "venue": m["venue"],
                 })
         if rows:
