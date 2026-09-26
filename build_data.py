@@ -366,7 +366,11 @@ def _fb_extract(wikitext):
     """Every {{Football box ...}} / {{Footballbox ...}}, brace-matched."""
     out, low, i = [], wikitext.lower(), 0
     while True:
-        hits = [h for h in (low.find("{{football box", i), low.find("{{footballbox", i)) if h != -1]
+        # Wikipédia écrit désormais certains matchs via un module Lua :
+        # {{#invoke:Football box|main|...}} au lieu de {{Football box|...}}.
+        hits = [h for h in (low.find("{{football box", i),
+                            low.find("{{footballbox", i),
+                            low.find("{{#invoke:football box", i)) if h != -1]
         if not hits:
             break
         idx = min(hits)
@@ -787,7 +791,8 @@ WIKI_SOURCES = [
 # (pas en {{Match rugby}}), avec des codes pays {{ruw|XXX}}.
 WIKI_EN_API = "https://en.wikipedia.org/w/api.php"
 
-EN_MONTHS = {m: i for i, m in enumerate(
+# nommé à part : ne doit pas écraser le EN_MONTHS (clés minuscules) du foot
+WXV_MONTHS = {m: i for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June",
      "July", "August", "September", "October", "November", "December"], 1)}
 
@@ -844,7 +849,7 @@ def parse_wxv(wikitext, names):
         rows, seen = [], set()
         for m in RE_ROW.finditer(chunk):
             hh, mm, day, mon_en, year, home_c, away_c, venue = m.groups()
-            mon = EN_MONTHS.get(mon_en)
+            mon = WXV_MONTHS.get(mon_en)
             if not mon:
                 continue
             home, away = names.get(home_c), names.get(away_c)
