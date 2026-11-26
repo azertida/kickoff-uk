@@ -1265,6 +1265,23 @@ def main():
             sources.append({"name": name, "sport": "Rugby", "ok": False, "error": str(e)})
             print(f"[!!] {name}: {e}", file=sys.stderr)
 
+    # Nations Championship et World Rugby Nations Cup (nov. 2026) : lus chez
+    # RugbyPass, noms déjà en anglais, horaires absolus, week-end final daté.
+    for name, uri, id_prefix in [
+        ("Nations Championship", "nations-championship", "nations-championship"),
+        ("Nations Cup", "world-rugby-nations-cup", "nations-cup"),
+    ]:
+        try:
+            rows = collect_rugbypass(uri, name, id_prefix)
+            matches += rows
+            sources.append({"name": name, "sport": "Rugby", "ok": True,
+                            "count": len(rows), "source": "RugbyPass"})
+            print(f"[ok] {name} (RugbyPass): {len(rows)} matchs")
+        except Exception as e:
+            sources.append({"name": name, "sport": "Rugby", "ok": False, "error": str(e)})
+            print(f"[!!] {name}: {e}", file=sys.stderr)
+        time.sleep(0.5)
+
     # Coupe du monde de rugby 2027 (Australie). Page à poules -> extraction entière.
     # tz="paris" par défaut : À VÉRIFIER au 1er run contre un match connu
     # (Australie-Hong Kong, 1 oct. 2027, Perth). Si décalé, passer tz="sydney".
